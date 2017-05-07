@@ -1,6 +1,6 @@
 package com.epam.training.spark.sql
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
@@ -58,13 +58,49 @@ object Homework {
 
   }
 
-  def readCsvData(sqlContext: HiveContext, rawDataPath: String): DataFrame = ???
+  def readCsvData(sqlContext: HiveContext, rawDataPath: String): DataFrame = {
+    sqlContext.read
+      .option("header", true)
+      .option("delimiter", ";")
+      .schema(Constants.CLIMATE_TYPE)
+      .csv(rawDataPath)
 
-  def findErrors(climateDataFrame: DataFrame): Array[Row] = ???
+  }
 
-  def averageTemperature(climateDataFrame: DataFrame, monthNumber: Int, dayOfMonth: Int): DataFrame = ???
+  def findErrors(climateDataFrame: DataFrame): Array[Row] = {
+    def countNulls(column: Column) = {
+      count(lit(1)) - count(column)
+    }
 
-  def predictTemperature(climateDataFrame: DataFrame, monthNumber: Int, dayOfMonth: Int): Double = ???
+    climateDataFrame
+      .select(
+        countNulls(col("observation_date")),
+        countNulls(col("mean_temperature")),
+        countNulls(col("max_temperature")),
+        countNulls(col("min_temperature")),
+        countNulls(col("precipitation_mm")),
+        countNulls(col("precipitation_type")),
+        countNulls(col("sunshine_hours"))
+      ).collect()
+  }
+
+  def averageTemperature(climateDataFrame: DataFrame, monthNumber: Int, dayOfMonth: Int): DataFrame = {
+    climateDataFrame
+      .filter(onDay(col("observation_date"), monthNumber, dayOfMonth))
+      .select(col("mean_temperature"))
+  }
+
+  def predictTemperature(climateDataFrame: DataFrame, monthNumber: Int, dayOfMonth: Int): Double = {
+    climateDataFrame
+      .filter(onDay(col("observation_date"), monthNumber, dayOfMonth)
+        .or(onDay(date_add(col("observation_date"), 1), monthNumber, dayOfMonth))
+        .or(onDay(date_sub(col("observation_date"), 1), monthNumber, dayOfMonth)))
+      .select(sum(col("mean_temperature")) / count(col("mean_temperature"))).first().getDouble(0)
+  }
+
+  private def onDay(column: Column, monthNumber: Int, dayOfMonth: Int) = {
+    (month(column) === monthNumber).and(dayofmonth(column) === dayOfMonth)
+  }
 
 
 }
